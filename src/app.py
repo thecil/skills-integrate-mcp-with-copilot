@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
 from pathlib import Path
+import json
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -18,6 +19,13 @@ app = FastAPI(title="Mergington High School API",
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+# Load teachers
+teachers_file = Path(__file__).parent.parent / 'teachers.json'
+with open(teachers_file) as f:
+    teachers = json.load(f)['teachers']
+
+logged_in = False
 
 # In-memory activity database
 activities = {
@@ -95,6 +103,10 @@ def signup_for_activity(activity_name: str, email: str):
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
 
+    # Check admin login
+    if not logged_in:
+        raise HTTPException(status_code=403, detail="Admin login required to modify registrations")
+
     # Get the specific activity
     activity = activities[activity_name]
 
@@ -117,6 +129,10 @@ def unregister_from_activity(activity_name: str, email: str):
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
 
+    # Check admin login
+    if not logged_in:
+        raise HTTPException(status_code=403, detail="Admin login required to modify registrations")
+
     # Get the specific activity
     activity = activities[activity_name]
 
@@ -130,3 +146,24 @@ def unregister_from_activity(activity_name: str, email: str):
     # Remove student
     activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
+
+
+@app.post("/login")
+def login(username: str, password: str):
+    global logged_in
+    if username in teachers and teachers[username] == password:
+        logged_in = True
+        return {"message": "Logged in successfully"}
+    raise HTTPException(status_code=401, detail="Invalid username or password")
+
+
+@app.post("/logout")
+def logout():
+    global logged_in
+    logged_in = False
+    return {"message": "Logged out successfully"}
+
+
+@app.get("/status")
+def get_status():
+    return {"logged_in": logged_in}
