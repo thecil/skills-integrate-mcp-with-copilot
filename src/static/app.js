@@ -3,6 +3,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const userIcon = document.getElementById('user-icon');
+  const logoutBtn = document.getElementById('logout-btn');
+  const loginModal = document.getElementById('login-modal');
+  const loginForm = document.getElementById('login-form');
+  const loginMessage = document.getElementById('login-message');
+  const closeModal = document.querySelector('.close');
+
+  let isLoggedIn = false;
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -60,10 +68,36 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
+
+      // Update UI after loading
+      updateUI();
     } catch (error) {
       activitiesList.innerHTML =
         "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
+    }
+  }
+
+  // Check login status
+  async function checkLoginStatus() {
+    try {
+      const response = await fetch('/status');
+      const data = await response.json();
+      isLoggedIn = data.logged_in;
+      updateUI();
+    } catch (error) {
+      console.error('Error checking login status:', error);
+    }
+  }
+
+  // Update UI based on login status
+  function updateUI() {
+    if (isLoggedIn) {
+      logoutBtn.classList.remove('hidden');
+      document.querySelectorAll('.delete-btn').forEach(btn => btn.style.display = 'inline');
+    } else {
+      logoutBtn.classList.add('hidden');
+      document.querySelectorAll('.delete-btn').forEach(btn => btn.style.display = 'none');
     }
   }
 
@@ -91,6 +125,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Refresh activities list to show updated participants
         fetchActivities();
+      } else if (response.status === 403) {
+        messageDiv.textContent = "Admin login required";
+        messageDiv.className = "error";
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -137,7 +174,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
+        if (response.status === 403) {
+          messageDiv.textContent = result.detail || 'Admin login required';
+        } else {
+          messageDiv.textContent = result.detail || 'An error occurred';
+        }
         messageDiv.className = "error";
       }
 
@@ -155,6 +196,59 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // User icon click
+  userIcon.addEventListener('click', () => {
+    if (!isLoggedIn) {
+      loginModal.classList.remove('hidden');
+    }
+  });
+
+  // Logout
+  logoutBtn.addEventListener('click', async () => {
+    try {
+      const response = await fetch('/logout', { method: 'POST' });
+      if (response.ok) {
+        isLoggedIn = false;
+        updateUI();
+        fetchActivities();
+      }
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  });
+
+  // Close modal
+  closeModal.addEventListener('click', () => {
+    loginModal.classList.add('hidden');
+  });
+
+  // Login form
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    try {
+      const response = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ username, password })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        isLoggedIn = true;
+        updateUI();
+        loginModal.classList.add('hidden');
+        loginForm.reset();
+        fetchActivities();
+      } else {
+        loginMessage.textContent = data.detail || 'Login failed';
+        loginMessage.classList.remove('hidden');
+      }
+    } catch (error) {
+      loginMessage.textContent = 'Error logging in';
+      loginMessage.classList.remove('hidden');
+    }
+  });
+
   // Initialize app
-  fetchActivities();
-});
+  checkLoginStatus();
